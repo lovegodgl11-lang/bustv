@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Bus tv</title><meta name="title" content="Bus tv"><meta charset="UTF-8">
+<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Bus lcd tv</title><meta name="title" content="Bus lcd tv"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="./style.css"><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script><script type="importmap">{
   "imports": {}
 }</script></head><body>
@@ -221,8 +221,15 @@
         function onYouTubeIframeAPIReady() {
             ytPlayer = new YT.Player('youtube-player', {
                 height: '100%', width: '100%',
-                playerVars: { 'autoplay': 1, 'controls': 0, 'modestbranding': 1, 'rel': 0 },
-                events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
+                playerVars: { 
+                    'autoplay': 1, 
+                    'controls': 0, 
+                    'modestbranding': 1, 
+                    'rel': 0,
+                    'iv_load_policy': 3,
+                    'loop': 0
+                },
+                events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange, 'onError': onPlayerError }
             });
         }
 
@@ -235,30 +242,79 @@
         function onPlayerStateChange(event) {
             if (event.data === YT.PlayerState.ENDED) {
                 const playlist = lastKnownPlayerState.playlist || [];
+                if (playlist.length === 0) return;
+
                 let nextIndex = (lastKnownPlayerState.currentIndex || 0) + 1;
-                if (nextIndex >= playlist.length) nextIndex = 0; // simple loop
+                
+                if (lastKnownPlayerState.repeatMode === 'one') {
+                    ytPlayer.playVideoAt(lastKnownPlayerState.currentIndex);
+                    return;
+                }
+                
+                if (nextIndex >= playlist.length) {
+                    if (lastKnownPlayerState.repeatMode === 'playlist') {
+                        nextIndex = 0;
+                    } else {
+                        // End of playlist, do nothing.
+                        return;
+                    }
+                }
                 ytPlayer.playVideoAt(nextIndex);
             }
+        }
+        
+        function onPlayerError(event) {
+            console.error("YouTube Player Error:", event.data);
         }
 
         function handlePlayerStateUpdate(state) {
             if (!playerReady) return;
-            lastKnownPlayerState = state;
-            const currentPlaylistIds = ytPlayer.getPlaylist() || [];
+
+            const currentPlaylistIds = lastKnownPlayerState.playlist ? lastKnownPlayerState.playlist.map(v => v.id) : [];
             const newPlaylistIds = state.videoIds || [];
             
+            // Playlist Changed
             if (JSON.stringify(currentPlaylistIds) !== JSON.stringify(newPlaylistIds)) {
                 ytPlayer.loadPlaylist(newPlaylistIds, state.currentIndex || 0);
-            } else if (ytPlayer.getPlaylistIndex() !== state.currentIndex) {
+            } 
+            // Current video changed
+            else if (lastKnownPlayerState.currentIndex !== state.currentIndex) {
                 ytPlayer.playVideoAt(state.currentIndex || 0);
             }
             
-            const playerState = ytPlayer.getPlayerState();
-            if (state.isPlaying && playerState !== 1) ytPlayer.playVideo();
-            else if (!state.isPlaying && playerState === 1) ytPlayer.pauseVideo();
+            // Play/Pause state
+            const currentPlayerState = ytPlayer.getPlayerState();
+            if (state.isPlaying && currentPlayerState !== YT.PlayerState.PLAYING) {
+                ytPlayer.playVideo();
+            } else if (!state.isPlaying && currentPlayerState === YT.PlayerState.PLAYING) {
+                ytPlayer.pauseVideo();
+            }
+
+            // Volume
+            if (lastKnownPlayerState.volume !== state.volume) {
+                ytPlayer.setVolume(state.volume);
+            }
+
+            // Quality
+            if (lastKnownPlayerState.quality !== state.quality && ytPlayer.getAvailableQualityLevels().includes(state.quality)) {
+                ytPlayer.setPlaybackQuality(state.quality);
+            }
             
-            if (ytPlayer.getVolume() !== state.volume) ytPlayer.setVolume(state.volume);
-            if (state.seekTo) ytPlayer.seekTo(state.seekTo, true);
+            // Repeat mode (API only supports looping the whole playlist)
+            const shouldLoop = state.repeatMode === 'playlist';
+            if (ytPlayer.isLooping !== shouldLoop) {
+                ytPlayer.setLoop(shouldLoop);
+            }
+            
+            // Seek
+            if (state.seekTo) {
+                // Only seek if the difference is significant to avoid jitter
+                if (Math.abs(ytPlayer.getCurrentTime() - state.seekTo) > 2) {
+                    ytPlayer.seekTo(state.seekTo, true);
+                }
+            }
+            
+            lastKnownPlayerState = state;
         }
 
         function updatePlayerStatus() {
@@ -266,6 +322,7 @@
             
             const playerStatus = {
                 isPlaying: ytPlayer.getPlayerState() === 1,
+                isMuted: ytPlayer.isMuted(),
                 volume: ytPlayer.getVolume(),
                 currentTime: ytPlayer.getCurrentTime(),
                 duration: ytPlayer.getDuration(),
