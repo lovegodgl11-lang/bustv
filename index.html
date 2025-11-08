@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Bus tv</title><meta name="title" content="Bus tv"><meta name="description" content="Live status show all travel person "><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="./style.css"><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script><script type="importmap">{
+  "imports": {}
+}</script></head><body>
+
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bus Display</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display.swap');
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display.swap');
+        html, body { 
+            font-family: 'Inter', sans-serif; background-color: #030712; color: #f9fafb;
+            overflow: hidden; height: 100vh; width: 100vw;
+        }
+        .digital-font { font-family: 'Orbitron', sans-serif; }
+    </style>
+
+
+    <header class="bg-gray-900 p-4 border-b-2 border-indigo-500/30 flex justify-between items-center">
+        <h1 class="text-3xl font-bold">Staff Bus - Live Status</h1>
+        <div class="text-right">
+            <p class="text-lg">Live Location</p>
+            <p id="location-display" class="font-mono text-xl">--.----, --.----</p>
+        </div>
+    </header>
+    
+    <main class="flex-1 grid grid-cols-3 gap-6 p-6 overflow-hidden">
+        <!-- Next Stop -->
+        <div class="col-span-1 bg-gray-900/50 p-6 rounded-lg flex flex-col items-center justify-center text-center">
+            <h2 class="text-4xl font-bold uppercase tracking-widest text-yellow-400">Next Stop</h2>
+            <p id="next-stop-destination" class="text-7xl font-black my-4 text-white leading-tight">-</p>
+            <p id="next-stop-name" class="text-3xl font-bold text-gray-300">-</p>
+            <div id="countdown-container" class="mt-6">
+                <p class="text-2xl text-gray-400">Estimated Arrival In</p>
+                <p id="countdown-display" class="digital-font text-8xl font-black text-white">--:--</p>
+            </div>
+        </div>
+
+        <!-- On Board Staff -->
+        <div class="col-span-2 bg-gray-900/50 p-6 rounded-lg overflow-hidden flex flex-col">
+            <h2 class="text-3xl font-bold uppercase tracking-wider text-center mb-4 flex-shrink-0">On Board Staff</h2>
+            <div class="flex-grow overflow-y-auto">
+                <div id="onboard-list" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <!-- Staff cards injected here -->
+                </div>
+                <p id="no-onboard-msg" class="hidden text-center text-2xl text-gray-500 mt-10">No staff currently on board.</p>
+            </div>
+        </div>
+    </main>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyC0_DQIiyaVQllFH4pxH1Dm3r2kFXXoOgc",
+            authDomain: "navrosetailorapp.firebaseapp.com",
+            databaseURL: "https://navrosetailorapp-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "navrosetailorapp"
+        };
+        
+        let db, staffQueueRef, busDetailsRef;
+        let previousNextStop = null;
+        let countdownInterval = null;
+
+        const getTodayDateString = () => new Date().toISOString().slice(0, 10);
+
+        function speak(text) {
+            if (!('speechSynthesis' in window)) return;
+            speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-IN';
+            speechSynthesis.speak(utterance);
+        }
+        
+        function updateCountdown(eta) {
+            if (countdownInterval) clearInterval(countdownInterval);
+            const countdownDisplay = document.getElementById('countdown-display');
+            
+            const update = () => {
+                 if (!eta) {
+                    countdownDisplay.textContent = '--:--';
+                    clearInterval(countdownInterval);
+                    return;
+                 }
+                 const distance = eta - Date.now();
+                 if (distance < 0) {
+                    countdownDisplay.textContent = '00:00';
+                    clearInterval(countdownInterval);
+                    return;
+                 }
+                const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                countdownDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            };
+
+            update();
+            countdownInterval = setInterval(update, 1000);
+        }
+
+        function renderDisplay(staff, bus) {
+            // Render On Board List
+            const onBoardList = document.getElementById('onboard-list');
+            const noOnboardMsg = document.getElementById('no-onboard-msg');
+            onBoardList.innerHTML = '';
+            
+            const onBoardStaff = staff.filter(s => s.status === 'On Board').sort((a,b) => a.tokenNumber - b.tokenNumber);
+            
+            if (onBoardStaff.length > 0) {
+                noOnboardMsg.classList.add('hidden');
+                onBoardStaff.forEach(s => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-gray-800 p-4 rounded-lg text-center';
+                    card.innerHTML = `
+                        <p class="font-bold text-2xl text-indigo-300 digital-font">${s.tokenNumber}</p>
+                        <p class="font-semibold text-xl truncate">${s.staffName}</p>
+                        <p class="text-sm text-gray-400">${s.destination}</p>
+                    `;
+                    onBoardList.appendChild(card);
+                });
+            } else {
+                noOnboardMsg.classList.remove('hidden');
+            }
+
+            // Render Next Stop
+            const nextStopDestination = document.getElementById('next-stop-destination');
+            const nextStopName = document.getElementById('next-stop-name');
+            const countdownContainer = document.getElementById('countdown-container');
+
+            if (onBoardStaff.length > 0) {
+                const nextStaff = onBoardStaff[0];
+                nextStopDestination.textContent = nextStaff.destination;
+                nextStopName.textContent = nextStaff.staffName;
+                countdownContainer.classList.remove('hidden');
+                
+                // A real app would calculate ETA, here we use a placeholder countdown
+                // This will be improved if driver app sends ETA per user
+                const placeholderEta = nextStaff.eta || Date.now() + 5 * 60 * 1000;
+                updateCountdown(placeholderEta);
+
+
+                if (previousNextStop !== nextStaff.destination) {
+                    speak(`Next stop, ${nextStaff.destination}.`);
+                    previousNextStop = nextStaff.destination;
+                }
+            } else {
+                nextStopDestination.textContent = '-';
+                nextStopName.textContent = '-';
+                countdownContainer.classList.add('hidden');
+                updateCountdown(null);
+                previousNextStop = null;
+            }
+
+            // Render Location
+            const locationDisplay = document.getElementById('location-display');
+            if (bus && bus.live_location) {
+                const { latitude, longitude } = bus.live_location;
+                locationDisplay.textContent = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+            } else {
+                locationDisplay.textContent = '--.----, --.----';
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.database();
+
+            const today = getTodayDateString();
+            staffQueueRef = db.ref(`bus_transport/${today}/staff_queue`);
+            busDetailsRef = db.ref(`bus_transport/${today}/bus_details`);
+            
+            let staffData = [];
+            let busData = {};
+            
+            staffQueueRef.on('value', snapshot => {
+                const data = snapshot.val() || {};
+                staffData = Object.values(data);
+                renderDisplay(staffData, busData);
+            });
+            
+            busDetailsRef.on('value', snapshot => {
+                busData = snapshot.val() || {};
+                renderDisplay(staffData, busData);
+            });
+        });
+    </script>
+
+<script src="./script.js"></script></body></html>
