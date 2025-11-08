@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Bus tv</title><meta name="title" content="Bus tv"><meta name="description" content="Live status show all travel person "><meta charset="UTF-8">
+<html lang="en" class=""><head><script>window.livecodes = window.livecodes || {};</script><title>Bus tv</title><meta name="title" content="Bus tv"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="./style.css"><script src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js" async=""></script><script type="importmap">{
   "imports": {}
 }</script></head><body>
@@ -11,6 +11,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display.swap');
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display.swap');
@@ -19,40 +20,64 @@
             overflow: hidden; height: 100vh; width: 100vw;
         }
         .digital-font { font-family: 'Orbitron', sans-serif; }
+        .transition-all {
+            transition-property: all;
+            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+            transition-duration: 500ms;
+        }
+        #main-container.layout-split #staff-info-container { width: 50%; }
+        #main-container.layout-split #video-container { width: 50%; }
+        #main-container.layout-token_only #staff-info-container { width: 100%; }
+        #main-container.layout-token_only #video-container { width: 0%; visibility: hidden; }
+        #main-container.layout-full_tv #staff-info-container { width: 0%; visibility: hidden; }
+        #main-container.layout-full_tv #video-container { width: 100%; }
     </style>
 
 
-    <header class="bg-gray-900 p-4 border-b-2 border-indigo-500/30 flex justify-between items-center">
-        <h1 class="text-3xl font-bold">Staff Bus - Live Status</h1>
-        <div class="text-right">
-            <p class="text-lg">Live Location</p>
-            <p id="location-display" class="font-mono text-xl">--.----, --.----</p>
-        </div>
-    </header>
-    
-    <main class="flex-1 grid grid-cols-3 gap-6 p-6 overflow-hidden">
-        <!-- Next Stop -->
-        <div class="col-span-1 bg-gray-900/50 p-6 rounded-lg flex flex-col items-center justify-center text-center">
-            <h2 class="text-4xl font-bold uppercase tracking-widest text-yellow-400">Next Stop</h2>
-            <p id="next-stop-destination" class="text-7xl font-black my-4 text-white leading-tight">-</p>
-            <p id="next-stop-name" class="text-3xl font-bold text-gray-300">-</p>
-            <div id="countdown-container" class="mt-6">
-                <p class="text-2xl text-gray-400">Estimated Arrival In</p>
-                <p id="countdown-display" class="digital-font text-8xl font-black text-white">--:--</p>
-            </div>
+    <audio id="music-player" crossorigin="anonymous"></audio>
+
+    <div id="main-container" class="w-full h-full flex transition-all layout-token_only">
+        <!-- Staff Info Container -->
+        <div id="staff-info-container" class="w-full h-full flex flex-col transition-all">
+            <header class="bg-gray-900 p-4 border-b-2 border-indigo-500/30 flex justify-between items-center flex-shrink-0">
+                <h1 class="text-3xl font-bold">Staff Bus - Live Status</h1>
+                <div class="text-right">
+                    <p class="text-lg">Live Location</p>
+                    <p id="location-display" class="font-mono text-xl">--.----, --.----</p>
+                </div>
+            </header>
+            
+            <main class="flex-1 grid grid-cols-3 gap-6 p-6 overflow-hidden">
+                <!-- Next Stop -->
+                <div class="col-span-1 bg-gray-900/50 p-6 rounded-lg flex flex-col items-center justify-center text-center">
+                    <h2 class="text-4xl font-bold uppercase tracking-widest text-yellow-400">Next Stop</h2>
+                    <p id="next-stop-destination" class="text-7xl font-black my-4 text-white leading-tight">-</p>
+                    <p id="next-stop-name" class="text-3xl font-bold text-gray-300">-</p>
+                    <div id="countdown-container" class="mt-6">
+                        <p class="text-2xl text-gray-400">Estimated Arrival In</p>
+                        <p id="countdown-display" class="digital-font text-8xl font-black text-white">--:--</p>
+                    </div>
+                </div>
+
+                <!-- On Board Staff -->
+                <div class="col-span-2 bg-gray-900/50 p-6 rounded-lg overflow-hidden flex flex-col">
+                    <h2 class="text-3xl font-bold uppercase tracking-wider text-center mb-4 flex-shrink-0">On Board Staff</h2>
+                    <div class="flex-grow overflow-y-auto">
+                        <div id="onboard-list" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <!-- Staff cards injected here -->
+                        </div>
+                        <p id="no-onboard-msg" class="hidden text-center text-2xl text-gray-500 mt-10">No staff currently on board.</p>
+                    </div>
+                </div>
+            </main>
         </div>
 
-        <!-- On Board Staff -->
-        <div class="col-span-2 bg-gray-900/50 p-6 rounded-lg overflow-hidden flex flex-col">
-            <h2 class="text-3xl font-bold uppercase tracking-wider text-center mb-4 flex-shrink-0">On Board Staff</h2>
-            <div class="flex-grow overflow-y-auto">
-                <div id="onboard-list" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    <!-- Staff cards injected here -->
-                </div>
-                <p id="no-onboard-msg" class="hidden text-center text-2xl text-gray-500 mt-10">No staff currently on board.</p>
-            </div>
+        <!-- Video Container -->
+        <div id="video-container" class="w-0 h-full bg-black transition-all overflow-hidden">
+            <div id="youtube-player" class="w-full h-full"></div>
         </div>
-    </main>
+    </div>
+
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyC0_DQIiyaVQllFH4pxH1Dm3r2kFXXoOgc",
@@ -61,9 +86,13 @@
             projectId: "navrosetailorapp"
         };
         
-        let db, staffQueueRef, busDetailsRef;
+        let db, staffQueueRef, busDetailsRef, mediaControlsRef;
         let previousNextStop = null;
         let countdownInterval = null;
+
+        // Media state
+        let musicPlayer;
+        let ytPlayer, playerReady = false, lastKnownPlayerState = {}, playerStatusInterval;
 
         const getTodayDateString = () => new Date().toISOString().slice(0, 10);
 
@@ -135,11 +164,8 @@
                 nextStopName.textContent = nextStaff.staffName;
                 countdownContainer.classList.remove('hidden');
                 
-                // A real app would calculate ETA, here we use a placeholder countdown
-                // This will be improved if driver app sends ETA per user
                 const placeholderEta = nextStaff.eta || Date.now() + 5 * 60 * 1000;
                 updateCountdown(placeholderEta);
-
 
                 if (previousNextStop !== nextStaff.destination) {
                     speak(`Next stop, ${nextStaff.destination}.`);
@@ -163,13 +189,101 @@
             }
         }
         
+        // --- Media Handlers ---
+        function handleMediaControls(snapshot) {
+            if (!snapshot.exists()) return;
+            const data = snapshot.val();
+
+             if (data.command === 'set_layout' && data.layout) {
+                document.getElementById('main-container').className = `w-full h-full flex transition-all layout-${data.layout}`;
+            }
+
+            if (data.command === 'update_player_state' && data.state) {
+                handlePlayerStateUpdate(data.state);
+            }
+            
+            // Music controls
+            if (data.trackUrl && musicPlayer.src !== data.trackUrl) {
+                musicPlayer.src = data.trackUrl;
+            }
+            if (typeof data.volume === 'number' && musicPlayer.volume !== data.volume) {
+                musicPlayer.volume = data.volume;
+            }
+
+            switch (data.command) {
+                case 'play': musicPlayer.play().catch(e => console.error("Audio play failed:", e)); break;
+                case 'pause': musicPlayer.pause(); break;
+                case 'stop': musicPlayer.pause(); musicPlayer.src = ''; break;
+            }
+        }
+
+        // --- YouTube Player Logic ---
+        function onYouTubeIframeAPIReady() {
+            ytPlayer = new YT.Player('youtube-player', {
+                height: '100%', width: '100%',
+                playerVars: { 'autoplay': 1, 'controls': 0, 'modestbranding': 1, 'rel': 0 },
+                events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
+            });
+        }
+
+        function onPlayerReady(event) {
+            playerReady = true;
+            if (playerStatusInterval) clearInterval(playerStatusInterval);
+            playerStatusInterval = setInterval(updatePlayerStatus, 1000);
+        }
+
+        function onPlayerStateChange(event) {
+            if (event.data === YT.PlayerState.ENDED) {
+                const playlist = lastKnownPlayerState.playlist || [];
+                let nextIndex = (lastKnownPlayerState.currentIndex || 0) + 1;
+                if (nextIndex >= playlist.length) nextIndex = 0; // simple loop
+                ytPlayer.playVideoAt(nextIndex);
+            }
+        }
+
+        function handlePlayerStateUpdate(state) {
+            if (!playerReady) return;
+            lastKnownPlayerState = state;
+            const currentPlaylistIds = ytPlayer.getPlaylist() || [];
+            const newPlaylistIds = state.videoIds || [];
+            
+            if (JSON.stringify(currentPlaylistIds) !== JSON.stringify(newPlaylistIds)) {
+                ytPlayer.loadPlaylist(newPlaylistIds, state.currentIndex || 0);
+            } else if (ytPlayer.getPlaylistIndex() !== state.currentIndex) {
+                ytPlayer.playVideoAt(state.currentIndex || 0);
+            }
+            
+            const playerState = ytPlayer.getPlayerState();
+            if (state.isPlaying && playerState !== 1) ytPlayer.playVideo();
+            else if (!state.isPlaying && playerState === 1) ytPlayer.pauseVideo();
+            
+            if (ytPlayer.getVolume() !== state.volume) ytPlayer.setVolume(state.volume);
+            if (state.seekTo) ytPlayer.seekTo(state.seekTo, true);
+        }
+
+        function updatePlayerStatus() {
+            if (!playerReady || !ytPlayer || typeof ytPlayer.getPlayerState !== 'function') return;
+            
+            const playerStatus = {
+                isPlaying: ytPlayer.getPlayerState() === 1,
+                volume: ytPlayer.getVolume(),
+                currentTime: ytPlayer.getCurrentTime(),
+                duration: ytPlayer.getDuration(),
+                currentIndex: ytPlayer.getPlaylistIndex(),
+            };
+            
+            mediaControlsRef.child('playerStatus').set(playerStatus);
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             firebase.initializeApp(firebaseConfig);
             db = firebase.database();
+            musicPlayer = document.getElementById('music-player');
 
             const today = getTodayDateString();
             staffQueueRef = db.ref(`bus_transport/${today}/staff_queue`);
             busDetailsRef = db.ref(`bus_transport/${today}/bus_details`);
+            mediaControlsRef = db.ref(`bus_transport/${today}/media_controls`);
             
             let staffData = [];
             let busData = {};
@@ -184,6 +298,8 @@
                 busData = snapshot.val() || {};
                 renderDisplay(staffData, busData);
             });
+
+            mediaControlsRef.on('value', handleMediaControls);
         });
     </script>
 
